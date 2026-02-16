@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Formater</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+    background:#0a0a0a;color:#e0e0e0;
+    min-height:100vh;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;padding:1.5rem;
+  }
+  h1{font-size:2.2rem;font-weight:700;margin-bottom:0.25rem;color:#fff}
+  .subtitle{color:#888;margin-bottom:2rem;font-size:0.95rem}
+
+  /* Responsive container */
+  .container{width:100%;max-width:520px}
+
+  .drop-zone{
+    width:100%;border:2px dashed #333;
+    border-radius:16px;padding:3rem 2rem;text-align:center;
+    transition:all .2s ease;cursor:pointer;background:#111;
+  }
+  .drop-zone:hover,.drop-zone.dragover{border-color:#4f8ff7;background:#0d1a2e}
+  .drop-zone.has-file{border-color:#6fcf6f;background:#0a1f0a}
+  .drop-zone .icon{font-size:3rem;margin-bottom:1rem}
+  .drop-zone p{color:#999;font-size:0.95rem}
+  .drop-zone p span{color:#4f8ff7;text-decoration:underline;cursor:pointer}
+  .drop-zone .file-name{color:#6fcf6f;font-weight:600;font-size:1rem;margin-top:0.5rem}
+  input[type="file"]{display:none}
+
+  /* Drag-to-reorder heading fields */
+  .heading-fields{margin-top:1.5rem}
+  .heading-fields .section-label{color:#888;font-size:0.75rem;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.5rem}
+  .field-item{
+    display:flex;align-items:center;gap:0.5rem;
+    padding:0.4rem 0;border-radius:8px;transition:background .15s;
+  }
+  .field-item.dragging{opacity:0.4}
+  .field-item.drag-over{border-top:2px solid #4f8ff7}
+  .drag-handle{
+    cursor:grab;color:#555;font-size:1rem;padding:0 0.25rem;
+    user-select:none;-webkit-user-select:none;
+  }
+  .drag-handle:active{cursor:grabbing}
+  .field-item label{color:#aaa;font-size:0.8rem;min-width:70px}
+  .field-item input[type="text"]{
+    flex:1;padding:0.45rem 0.7rem;border-radius:8px;
+    border:1px solid #333;background:#181818;color:#fff;
+    font-size:0.9rem;outline:none;transition:border .2s;
+  }
+  .field-item input[type="text"]:focus{border-color:#4f8ff7}
+  .field-item input[type="text"].disabled{opacity:0.4;pointer-events:none}
+
+  .check-row{
+    margin-top:0.75rem;display:flex;align-items:center;gap:0.5rem;
+  }
+  .check-row input[type="checkbox"]{accent-color:#4f8ff7;width:16px;height:16px}
+  .check-row label{color:#aaa;font-size:0.85rem;cursor:pointer}
+
+  .btn-row{margin-top:1.25rem;text-align:center;display:flex;gap:0.75rem;justify-content:center;flex-wrap:wrap}
+  .format-btn,.reset-btn{
+    padding:0.7rem 2rem;border:none;border-radius:10px;
+    font-size:1rem;font-weight:600;transition:all .2s;
+  }
+  .format-btn{background:#333;color:#666;cursor:not-allowed}
+  .format-btn.active{background:#4f8ff7;color:#fff;cursor:pointer}
+  .format-btn.active:hover{background:#3a7ae0}
+  /* Reset button */
+  .reset-btn{background:#222;color:#888;cursor:pointer;display:none}
+  .reset-btn:hover{background:#333;color:#ccc}
+  .reset-btn.show{display:inline-block}
+
+  .status{margin-top:1.5rem;min-height:60px;display:none}
+  .status.show{display:block}
+  .status .msg{padding:1rem;border-radius:12px;font-size:0.9rem;line-height:1.5}
+  .msg.processing{background:#0d1a2e;border:1px solid #1a3a6e;color:#7db4fc}
+  .msg.success{background:#0a1f0a;border:1px solid #1a4a1a;color:#6fcf6f}
+  .msg.error{background:#1f0a0a;border:1px solid #4a1a1a;color:#cf6f6f}
+  .issues{margin-top:0.75rem;padding-left:1.2rem}
+  .issues li{margin-bottom:0.25rem;font-size:0.85rem;color:#ccc}
+
+  /* Page preview */
+  .page-wrap{margin-top:1rem;text-align:center;max-height:70vh;overflow-y:auto;padding:0.5rem 0}
+  .page-wrap .label{font-size:0.75rem;color:#666;margin-bottom:0.75rem;text-transform:uppercase;letter-spacing:0.05em}
+  .page{
+    display:block;width:380px;height:490px;margin:0 auto 1.5rem auto;
+    background:#fff;color:#000;text-align:left;
+    font-family:'Times New Roman',serif;font-size:9px;line-height:1;
+    padding:28px 36px;
+    box-shadow:0 4px 24px rgba(0,0,0,0.5);border-radius:2px;
+    overflow:hidden;
+  }
+  .page .pg-header{text-align:right;font-size:9px;margin-bottom:8px;color:#333}
+  .page .pg-para{
+    margin:0;padding:0;font-size:9px;line-height:2;white-space:pre-wrap;
+  }
+  .page .pg-heading{text-align:left}
+  .page .pg-title{text-align:center}
+  .page .pg-body{text-indent:20px;text-align:left}
+  .page .pg-wc-header{text-align:center}
+  .page .pg-wc-entry{padding-left:20px;text-indent:-20px;text-align:left}
+  .page-num{text-align:center;font-size:0.7rem;color:#555;margin-top:-1rem;margin-bottom:1rem}
+  .download-btn{
+    display:inline-block;margin-top:1rem;padding:0.6rem 1.5rem;
+    background:#4f8ff7;color:#fff;border:none;border-radius:8px;
+    font-size:0.9rem;font-weight:600;cursor:pointer;
+    text-decoration:none;transition:background .2s;
+  }
+  .download-btn:hover{background:#3a7ae0}
+  .spinner{
+    display:inline-block;width:16px;height:16px;
+    border:2px solid #7db4fc;border-top-color:transparent;
+    border-radius:50%;animation:spin .6s linear infinite;
+    vertical-align:middle;margin-right:0.5rem;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .footer{margin-top:2rem;color:#444;font-size:0.8rem;text-align:center}
+
+  /* Mobile responsive */
+  @media(max-width:560px){
+    body{padding:1rem}
+    h1{font-size:1.6rem}
+    .drop-zone{padding:2rem 1rem}
+    .page{width:100%;height:auto;min-height:300px;padding:20px 24px}
+    .field-item label{min-width:55px;font-size:0.75rem}
+    .field-item input[type="text"]{font-size:0.85rem;padding:0.4rem 0.5rem}
+    .btn-row{flex-direction:column}
+    .format-btn,.reset-btn{width:100%}
+  }
+</style>
+</head>
+<body>
+  <h1>Formater</h1>
+  <p class="subtitle">Drop a .docx essay &mdash; get it back in MLA 9th edition format</p>
+
+  <div class="container">
+    <div class="drop-zone" id="dropZone">
+      <div class="icon" id="dropIcon">&#128196;</div>
+      <p id="dropText">Drag &amp; drop your <strong>.docx</strong> file here<br>or <span id="browseBtn">browse</span></p>
+      <div class="file-name" id="fileName" style="display:none"></div>
+      <input type="file" id="fileInput" accept=".docx">
+    </div>
+
+    <!-- Drag-to-reorder heading fields -->
+    <div class="heading-fields" id="headingFields">
+      <div class="section-label">MLA Heading (drag to reorder)</div>
+      <div id="fieldsContainer">
+        <div class="field-item" draggable="true" data-field="name">
+          <span class="drag-handle">&#9776;</span>
+          <label>Name</label>
+          <input type="text" id="name" placeholder="John Doe">
+        </div>
+        <div class="field-item" draggable="true" data-field="instructor">
+          <span class="drag-handle">&#9776;</span>
+          <label>Instructor</label>
+          <input type="text" id="instructor" placeholder="Dr. Smith">
+        </div>
+        <div class="field-item" draggable="true" data-field="course">
+          <span class="drag-handle">&#9776;</span>
+          <label>Course</label>
+          <input type="text" id="course" placeholder="English 101">
+        </div>
+        <div class="field-item" draggable="true" data-field="date">
+          <span class="drag-handle">&#9776;</span>
+          <label>Date</label>
+          <input type="text" id="date" placeholder="">
+        </div>
+      </div>
+    </div>
+
+    <div class="check-row">
+      <input type="checkbox" id="noHeading">
+      <label for="noHeading">My essay has no heading &mdash; skip heading insertion</label>
+    </div>
+
+    <div class="btn-row">
+      <button class="format-btn" id="formatBtn" disabled>Format to MLA</button>
+      <!-- Reset button -->
+      <button class="reset-btn" id="resetPageBtn">Format Another</button>
+    </div>
+
+    <div class="status" id="status"><div class="msg" id="msg"></div></div>
+  </div>
+
+  <p class="footer">AI-powered structure detection &middot; Works Cited rewriting &middot; Times New Roman 12pt &middot; 1&quot; margins &middot; double-spaced</p>
+
+<script>
+(function(){
+  var dropZone = document.getElementById('dropZone');
+  var fileInput = document.getElementById('fileInput');
+  var formatBtn = document.getElementById('formatBtn');
+  var resetPageBtn = document.getElementById('resetPageBtn');
+  var statusEl = document.getElementById('status');
+  var msgEl = document.getElementById('msg');
+  var fileNameEl = document.getElementById('fileName');
+  var dropText = document.getElementById('dropText');
+  var dropIcon = document.getElementById('dropIcon');
+  var noHeadingCb = document.getElementById('noHeading');
+  var fieldsContainer = document.getElementById('fieldsContainer');
+  var selectedFile = null;
+
+  // Auto-fill date
+  var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var now = new Date();
+  document.getElementById('date').value = now.getDate() + ' ' + months[now.getMonth()] + ' ' + now.getFullYear();
+
+  // Toggle heading fields
+  noHeadingCb.addEventListener('change', function(){
+    var inputs = fieldsContainer.querySelectorAll('input[type="text"]');
+    for (var i = 0; i < inputs.length; i++) {
+      inputs[i].classList.toggle('disabled', noHeadingCb.checked);
+    }
+    var handles = fieldsContainer.querySelectorAll('.drag-handle');
+    for (var i = 0; i < handles.length; i++) {
+      handles[i].style.opacity = noHeadingCb.checked ? '0.2' : '1';
+    }
+  });
+
+  // ── Drag-to-reorder heading fields ──
+  var dragItem = null;
+  fieldsContainer.addEventListener('dragstart', function(e){
+    if (noHeadingCb.checked) { e.preventDefault(); return; }
+    dragItem = e.target.closest('.field-item');
+    if (dragItem) dragItem.classList.add('dragging');
+  });
+  fieldsContainer.addEventListener('dragend', function(){
+    if (dragItem) dragItem.classList.remove('dragging');
+    dragItem = null;
+    var items = fieldsContainer.querySelectorAll('.field-item');
+    for (var i = 0; i < items.length; i++) items[i].classList.remove('drag-over');
+  });
+  fieldsContainer.addEventListener('dragover', function(e){
+    e.preventDefault();
+    var target = e.target.closest('.field-item');
+    if (!target || target === dragItem) return;
+    var items = fieldsContainer.querySelectorAll('.field-item');
+    for (var i = 0; i < items.length; i++) items[i].classList.remove('drag-over');
+    target.classList.add('drag-over');
+  });
+  fieldsContainer.addEventListener('drop', function(e){
+    e.preventDefault();
+    var target = e.target.closest('.field-item');
+    if (!target || !dragItem || target === dragItem) return;
+    fieldsContainer.insertBefore(dragItem, target);
+    var items = fieldsContainer.querySelectorAll('.field-item');
+    for (var i = 0; i < items.length; i++) items[i].classList.remove('drag-over');
+  });
+
+  // ── Drag & drop file ──
+  document.addEventListener('dragover', function(e){ e.preventDefault(); }, false);
+  document.addEventListener('drop', function(e){ e.preventDefault(); }, false);
+  document.getElementById('browseBtn').addEventListener('click', function(e){
+    e.stopPropagation(); fileInput.click();
+  });
+  dropZone.addEventListener('click', function(){ fileInput.click(); });
+  dropZone.addEventListener('dragenter', function(e){ e.preventDefault(); e.stopPropagation(); dropZone.classList.add('dragover'); }, false);
+  dropZone.addEventListener('dragover', function(e){ e.preventDefault(); e.stopPropagation(); dropZone.classList.add('dragover'); }, false);
+  dropZone.addEventListener('dragleave', function(e){ e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('dragover'); }, false);
+  dropZone.addEventListener('drop', function(e){
+    e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('dragover');
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) selectFile(e.dataTransfer.files[0]);
+  }, false);
+  fileInput.addEventListener('change', function(){ if (fileInput.files.length > 0) selectFile(fileInput.files[0]); });
+
+  function selectFile(file) {
+    if (!file.name.toLowerCase().endsWith('.docx')) { showMsg('error', 'Please upload a .docx file'); return; }
+    selectedFile = file;
+    dropZone.classList.add('has-file');
+    dropIcon.innerHTML = '&#9989;';
+    dropText.style.display = 'none';
+    fileNameEl.style.display = 'block';
+    fileNameEl.textContent = file.name;
+    formatBtn.classList.add('active');
+    formatBtn.disabled = false;
+  }
+
+  // ── Format button ──
+  formatBtn.addEventListener('click', function(){
+    if (!selectedFile) return;
+    showMsg('processing', '<span class="spinner"></span> Formatting to MLA... (AI is analyzing &amp; rewriting citations)');
+    formatBtn.disabled = true;
+    formatBtn.classList.remove('active');
+
+    var fd = new FormData();
+    fd.append('file', selectedFile);
+    if (noHeadingCb.checked) {
+      fd.append('no_heading', 'true');
+    } else {
+      // Read fields in current DOM order
+      var fieldItems = fieldsContainer.querySelectorAll('.field-item');
+      var headingOrder = [];
+      for (var i = 0; i < fieldItems.length; i++) {
+        var fieldName = fieldItems[i].getAttribute('data-field');
+        var val = fieldItems[i].querySelector('input').value;
+        fd.append(fieldName, val);
+        headingOrder.push(fieldName);
+      }
+      fd.append('heading_order', JSON.stringify(headingOrder));
+    }
+
+    fetch('/format', { method: 'POST', body: fd })
+      .then(function(r){ return r.json(); })
+      .then(function(data){
+        if (data.error) { showMsg('error', data.error); resetBtn(); return; }
+        var h = '<strong>Formatted successfully!</strong>';
+        if (data.title) h += '<br>Detected title: "' + data.title + '"';
+        if (data.pre_issues && data.pre_issues.length) {
+          h += '<br><br>Pre-format issues:<ul class="issues">';
+          data.pre_issues.forEach(function(item){ h += '<li>' + item + '</li>'; });
+          h += '</ul>';
+        }
+        var hasStructured =
+          Array.isArray(data.verified_passes) ||
+          Array.isArray(data.verified_warnings) ||
+          Array.isArray(data.content_warnings) ||
+          Array.isArray(data.manual_review);
+
+        if (hasStructured) {
+          var verifiedPasses = Array.isArray(data.verified_passes) ? data.verified_passes : [];
+          var verifiedWarnings = Array.isArray(data.verified_warnings) ? data.verified_warnings : [];
+          var contentWarnings = Array.isArray(data.content_warnings) ? data.content_warnings : [];
+          var manualReview = Array.isArray(data.manual_review) ? data.manual_review : [];
+          var actionNeeded = verifiedWarnings.concat(contentWarnings);
+
+          if (verifiedPasses.length) {
+            h += '<br><br>Verified checks passed:<ul class="issues">';
+            verifiedPasses.forEach(function(item){ h += '<li>' + item + '</li>'; });
+            h += '</ul>';
+          }
+          if (actionNeeded.length) {
+            h += '<br>Action needed:<ul class="issues">';
+            actionNeeded.forEach(function(item){ h += '<li>' + item + '</li>'; });
+            h += '</ul>';
+          }
+          if (manualReview.length) {
+            h += '<br>Manual review:<ul class="issues">';
+            manualReview.forEach(function(item){ h += '<li>' + item + '</li>'; });
+            h += '</ul>';
+          }
+          if (!verifiedPasses.length && !actionNeeded.length && !manualReview.length) {
+            h += '<br>No MLA compliance issues detected.';
+          }
+        } else {
+          if (data.post_issues && data.post_issues.length) {
+            h += '<br>Post-format check:<ul class="issues">';
+            data.post_issues.forEach(function(item){ h += '<li>' + item + '</li>'; });
+            h += '</ul>';
+          }
+          if (data.post_issues && data.post_issues.length === 0) {
+            h += '<br>AI found no remaining MLA issues';
+          }
+        }
+        if (data.preview && data.preview.length) {
+          h += buildPagePreview(data.preview, data.last_name || 'Author');
+        }
+        var dlName = data.download_name || 'essay_mla.docx';
+        h += '<br><a class="download-btn" href="/download/' + data.file_id + '?name=' + encodeURIComponent(dlName) + '">Download MLA Document</a>';
+        showMsg('success', h);
+        resetBtn();
+        // Show "Format Another" button
+        resetPageBtn.classList.add('show');
+      })
+      .catch(function(err){
+        showMsg('error', 'Something went wrong: ' + err.message);
+        resetBtn();
+      });
+  });
+
+  // Reset entire page for another document
+  resetPageBtn.addEventListener('click', function(){
+    selectedFile = null;
+    dropZone.classList.remove('has-file');
+    dropIcon.innerHTML = '&#128196;';
+    dropText.style.display = '';
+    fileNameEl.style.display = 'none';
+    fileNameEl.textContent = '';
+    fileInput.value = '';
+    formatBtn.classList.remove('active');
+    formatBtn.disabled = true;
+    statusEl.classList.remove('show');
+    msgEl.innerHTML = '';
+    resetPageBtn.classList.remove('show');
+    // Clear input fields
+    document.getElementById('name').value = '';
+    document.getElementById('instructor').value = '';
+    document.getElementById('course').value = '';
+    // Reset date to today
+    document.getElementById('date').value = now.getDate() + ' ' + months[now.getMonth()] + ' ' + now.getFullYear();
+    noHeadingCb.checked = false;
+    var inputs = fieldsContainer.querySelectorAll('input[type="text"]');
+    for (var i = 0; i < inputs.length; i++) inputs[i].classList.remove('disabled');
+    var handles = fieldsContainer.querySelectorAll('.drag-handle');
+    for (var i = 0; i < handles.length; i++) handles[i].style.opacity = '1';
+  });
+
+  function resetBtn() {
+    formatBtn.classList.add('active');
+    formatBtn.disabled = false;
+  }
+  function showMsg(type, html) {
+    statusEl.classList.add('show');
+    msgEl.className = 'msg ' + type;
+    msgEl.innerHTML = html;
+  }
+  function escapeHtml(str) {
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  // Multi-page preview renderer
+  function buildPagePreview(items, lastName) {
+    var LINES_PER_PAGE = 24, CHARS_PER_LINE = 52;
+    var pages = [], currentPage = [], currentLines = 0;
+    function estimateLines(text, type) {
+      if (type === 'heading' || type === 'title' || type === 'wc_header') return 1;
+      return Math.max(1, Math.ceil(text.length / CHARS_PER_LINE));
+    }
+    for (var i = 0; i < items.length; i++) {
+      var item = items[i];
+      if (item.pb && currentPage.length > 0) {
+        pages.push(currentPage); currentPage = []; currentLines = 0;
+      }
+      var lines = estimateLines(item.text, item.type);
+      if (currentLines + lines > LINES_PER_PAGE && currentPage.length > 0) {
+        pages.push(currentPage); currentPage = []; currentLines = 0;
+      }
+      currentPage.push(item); currentLines += lines;
+    }
+    if (currentPage.length > 0) pages.push(currentPage);
+    var html = '<div class="page-wrap"><div class="label">Document Preview (' + pages.length + ' page' + (pages.length > 1 ? 's' : '') + ') • MLA spacing view</div>';
+    for (var p = 0; p < pages.length; p++) {
+      html += '<div class="page"><div class="pg-header">' + escapeHtml(lastName) + ' ' + (p+1) + '</div>';
+      for (var j = 0; j < pages[p].length; j++) {
+        var it = pages[p][j], cls = 'pg-body';
+        if (it.type === 'heading') cls = 'pg-heading';
+        else if (it.type === 'title') cls = 'pg-title';
+        else if (it.type === 'wc_header') cls = 'pg-wc-header';
+        else if (it.type === 'wc_entry') cls = 'pg-wc-entry';
+        html += '<div class="pg-para ' + cls + '">' + escapeHtml(it.text) + '</div>';
+      }
+      html += '</div><div class="page-num">Page ' + (p+1) + ' of ' + pages.length + '</div>';
+    }
+    html += '</div>';
+    return html;
+  }
+})();
+</script>
+</body>
+</html>

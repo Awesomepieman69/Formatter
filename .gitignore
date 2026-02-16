@@ -1,0 +1,16 @@
+# Python cache
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Local env and secrets
+.env
+.venv/
+venv/
+
+# IDE/local tooling
+.cursor/
+.DS_Store
+
+# Runtime temp files
+*.log
