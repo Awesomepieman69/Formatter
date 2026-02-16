@@ -2,3 +2,4 @@ python-docx
 openai
 python-dotenv
 flask
+gunicorn
