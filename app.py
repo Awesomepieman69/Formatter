@@ -14,8 +14,8 @@ from dotenv import load_dotenv
 # Load .env from script directory
 load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
-# (#5) Single import — app.py just calls format_mla, no duplicate logic
-from mla_formatter import format_mla
+# (#5) Single import — app.py just calls formatter functions, no duplicate logic
+from mla_formatter import format_document, normalize_style
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 50 * 1024 * 1024  # 50MB max
@@ -71,11 +71,14 @@ def format_file():
     # Save uploaded file
     file_id = uuid.uuid4().hex[:12]
     input_path = os.path.join(UPLOAD_DIR, f"{file_id}_input.docx")
-    output_path = os.path.join(UPLOAD_DIR, f"{file_id}_mla.docx")
+    # Style toggle (default MLA for backward compatibility)
+    style = normalize_style(request.form.get("style", "mla"))
+    output_path = os.path.join(UPLOAD_DIR, f"{file_id}_{style}.docx")
     file.save(input_path)
 
     # Get optional fields
     name = request.form.get("name", "")
+    institution = request.form.get("institution", "")
     instructor = request.form.get("instructor", "")
     course = request.form.get("course", "")
     date_str = request.form.get("date", "")
@@ -95,21 +98,28 @@ def format_file():
     use_ai = bool(api_key)
 
     try:
-        # (#5) Call format_mla directly — no duplicate logic
-        result = format_mla(
+        # (#5) Call formatter directly — no duplicate logic
+        result = format_document(
             input_path, output_path,
+            style=style,
             name=name, instructor=instructor, course=course, date=date_str,
+            institution=institution,
             use_ai=use_ai, api_key=api_key, no_heading=no_heading,
             heading_order=heading_order,
         )
         result["file_id"] = file_id
+        result["style"] = style
         # (#11) Pass download name back to client
-        result["download_name"] = f"{orig_name}_mla.docx"
+        result["download_name"] = f"{orig_name}_{style}.docx"
     except Exception as e:
         return jsonify(error=f"Formatting failed: {str(e)}"), 500
 
     # (#6) Register files for cleanup
-    file_registry[file_id] = {"paths": [input_path, output_path], "created": time.time()}
+    file_registry[file_id] = {
+        "paths": [input_path, output_path],
+        "output_path": output_path,
+        "created": time.time(),
+    }
 
     return jsonify(result)
 
@@ -119,11 +129,14 @@ def download(file_id):
     # Sanitize file_id to prevent path traversal
     if not file_id.isalnum():
         return "Invalid ID", 400
-    path = os.path.join(UPLOAD_DIR, f"{file_id}_mla.docx")
-    if not os.path.exists(path):
+    file_info = file_registry.get(file_id)
+    if not file_info:
+        return "File not found", 404
+    path = file_info.get("output_path", "")
+    if not path or not os.path.exists(path):
         return "File not found", 404
     # (#11) Use original filename from query param, fallback to generic
-    dl_name = request.args.get("name", "essay_mla.docx")
+    dl_name = request.args.get("name", "essay_formatted.docx")
     return send_file(path, as_attachment=True, download_name=dl_name)
 
 

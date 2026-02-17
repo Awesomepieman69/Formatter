@@ -15,6 +15,18 @@
   h1{font-size:2.2rem;font-weight:700;margin-bottom:0.25rem;color:#fff}
   .subtitle{color:#888;margin-bottom:2rem;font-size:0.95rem}
 
+  .style-row{
+    margin:1rem 0 0.25rem 0;
+    display:flex;gap:0.5rem;justify-content:center;
+  }
+  .style-pill{
+    display:inline-flex;align-items:center;gap:0.4rem;
+    padding:0.45rem 0.8rem;border:1px solid #333;border-radius:999px;
+    background:#111;color:#bbb;font-size:0.82rem;cursor:pointer;
+  }
+  .style-pill input{accent-color:#4f8ff7}
+  .style-pill.active{border-color:#4f8ff7;color:#d7e7ff;background:#0d1a2e}
+
   /* Responsive container */
   .container{width:100%;max-width:520px}
 
@@ -102,6 +114,10 @@
   .page .pg-body{text-indent:20px;text-align:left}
   .page .pg-wc-header{text-align:center}
   .page .pg-wc-entry{padding-left:20px;text-indent:-20px;text-align:left}
+  .page .pg-apa-titlepage{text-align:center}
+  .page .pg-apa-body-title{text-align:center}
+  .page .pg-ref-header{text-align:center}
+  .page .pg-ref-entry{padding-left:20px;text-indent:-20px;text-align:left}
   .page-num{text-align:center;font-size:0.7rem;color:#555;margin-top:-1rem;margin-bottom:1rem}
   .download-btn{
     display:inline-block;margin-top:1rem;padding:0.6rem 1.5rem;
@@ -134,7 +150,7 @@
 </head>
 <body>
   <h1>Formater</h1>
-  <p class="subtitle">Drop a .docx essay &mdash; get it back in MLA 9th edition format</p>
+  <p class="subtitle" id="subtitle">Drop a .docx essay &mdash; get it back in MLA 9th edition format</p>
 
   <div class="container">
     <div class="drop-zone" id="dropZone">
@@ -144,10 +160,21 @@
       <input type="file" id="fileInput" accept=".docx">
     </div>
 
-    <!-- Drag-to-reorder heading fields -->
+    <div class="style-row" id="styleRow">
+      <label class="style-pill active" id="stylePillMla">
+        <input type="radio" name="style" value="mla" checked>
+        MLA
+      </label>
+      <label class="style-pill" id="stylePillApa">
+        <input type="radio" name="style" value="apa">
+        APA
+      </label>
+    </div>
+
+    <!-- Style-specific fields -->
     <div class="heading-fields" id="headingFields">
-      <div class="section-label">MLA Heading (drag to reorder)</div>
-      <div id="fieldsContainer">
+      <div class="section-label" id="fieldsLabel">MLA Heading (drag to reorder)</div>
+      <div id="mlaFields">
         <div class="field-item" draggable="true" data-field="name">
           <span class="drag-handle">&#9776;</span>
           <label>Name</label>
@@ -169,9 +196,31 @@
           <input type="text" id="date" placeholder="">
         </div>
       </div>
+      <div id="apaFields" style="display:none">
+        <div class="field-item" data-field="name">
+          <label>Name</label>
+          <input type="text" id="apa_name" placeholder="John Doe">
+        </div>
+        <div class="field-item" data-field="institution">
+          <label>Institution</label>
+          <input type="text" id="institution" placeholder="School Name">
+        </div>
+        <div class="field-item" data-field="course">
+          <label>Course</label>
+          <input type="text" id="apa_course" placeholder="English 101">
+        </div>
+        <div class="field-item" data-field="instructor">
+          <label>Instructor</label>
+          <input type="text" id="apa_instructor" placeholder="Dr. Smith">
+        </div>
+        <div class="field-item" data-field="date">
+          <label>Date</label>
+          <input type="text" id="apa_date" placeholder="">
+        </div>
+      </div>
     </div>
 
-    <div class="check-row">
+    <div class="check-row" id="noHeadingRow">
       <input type="checkbox" id="noHeading">
       <label for="noHeading">My essay has no heading &mdash; skip heading insertion</label>
     </div>
@@ -185,10 +234,11 @@
     <div class="status" id="status"><div class="msg" id="msg"></div></div>
   </div>
 
-  <p class="footer">AI-powered structure detection &middot; Works Cited rewriting &middot; Times New Roman 12pt &middot; 1&quot; margins &middot; double-spaced</p>
+  <p class="footer">AI-powered structure detection &middot; Citation checks &middot; Times New Roman 12pt &middot; 1&quot; margins &middot; double-spaced</p>
 
 <script>
 (function(){
+  var currentStyle = 'mla';
   var dropZone = document.getElementById('dropZone');
   var fileInput = document.getElementById('fileInput');
   var formatBtn = document.getElementById('formatBtn');
@@ -198,22 +248,75 @@
   var fileNameEl = document.getElementById('fileName');
   var dropText = document.getElementById('dropText');
   var dropIcon = document.getElementById('dropIcon');
+  var subtitleEl = document.getElementById('subtitle');
+  var fieldsLabel = document.getElementById('fieldsLabel');
+  var noHeadingRow = document.getElementById('noHeadingRow');
+  var mlaFields = document.getElementById('mlaFields');
+  var apaFields = document.getElementById('apaFields');
+  var stylePillMla = document.getElementById('stylePillMla');
+  var stylePillApa = document.getElementById('stylePillApa');
   var noHeadingCb = document.getElementById('noHeading');
-  var fieldsContainer = document.getElementById('fieldsContainer');
   var selectedFile = null;
 
   // Auto-fill date
   var months = ['January','February','March','April','May','June','July','August','September','October','November','December'];
   var now = new Date();
   document.getElementById('date').value = now.getDate() + ' ' + months[now.getMonth()] + ' ' + now.getFullYear();
+  document.getElementById('apa_date').value = document.getElementById('date').value;
+
+  function syncApaFieldsFromMla() {
+    var apaName = document.getElementById('apa_name');
+    var apaInstructor = document.getElementById('apa_instructor');
+    var apaCourse = document.getElementById('apa_course');
+    var apaDate = document.getElementById('apa_date');
+    if (!apaName.value) apaName.value = document.getElementById('name').value;
+    if (!apaInstructor.value) apaInstructor.value = document.getElementById('instructor').value;
+    if (!apaCourse.value) apaCourse.value = document.getElementById('course').value;
+    if (!apaDate.value) apaDate.value = document.getElementById('date').value;
+  }
+
+  function setStyle(style) {
+    currentStyle = style === 'apa' ? 'apa' : 'mla';
+    stylePillMla.classList.toggle('active', currentStyle === 'mla');
+    stylePillApa.classList.toggle('active', currentStyle === 'apa');
+    mlaFields.style.display = currentStyle === 'mla' ? 'block' : 'none';
+    apaFields.style.display = currentStyle === 'apa' ? 'block' : 'none';
+    noHeadingRow.style.display = currentStyle === 'mla' ? 'flex' : 'none';
+    if (currentStyle === 'mla') {
+      subtitleEl.innerHTML = 'Drop a .docx essay &mdash; get it back in MLA 9th edition format';
+      fieldsLabel.textContent = 'MLA Heading (drag to reorder)';
+      formatBtn.textContent = 'Format to MLA';
+      var mlaInputs = mlaFields.querySelectorAll('input[type="text"]');
+      for (var i = 0; i < mlaInputs.length; i++) {
+        mlaInputs[i].classList.toggle('disabled', noHeadingCb.checked);
+      }
+      var handles = mlaFields.querySelectorAll('.drag-handle');
+      for (var h = 0; h < handles.length; h++) {
+        handles[h].style.opacity = noHeadingCb.checked ? '0.2' : '1';
+      }
+    } else {
+      subtitleEl.innerHTML = 'Drop a .docx essay &mdash; get it back in APA 7th edition format';
+      fieldsLabel.textContent = 'APA Title Page Fields';
+      formatBtn.textContent = 'Format to APA';
+      syncApaFieldsFromMla();
+    }
+  }
+
+  var styleInputs = document.querySelectorAll('input[name="style"]');
+  for (var s = 0; s < styleInputs.length; s++) {
+    styleInputs[s].addEventListener('change', function(e){
+      setStyle(e.target.value);
+    });
+  }
+  setStyle('mla');
 
   // Toggle heading fields
   noHeadingCb.addEventListener('change', function(){
-    var inputs = fieldsContainer.querySelectorAll('input[type="text"]');
+    var inputs = mlaFields.querySelectorAll('input[type="text"]');
     for (var i = 0; i < inputs.length; i++) {
       inputs[i].classList.toggle('disabled', noHeadingCb.checked);
     }
-    var handles = fieldsContainer.querySelectorAll('.drag-handle');
+    var handles = mlaFields.querySelectorAll('.drag-handle');
     for (var i = 0; i < handles.length; i++) {
       handles[i].style.opacity = noHeadingCb.checked ? '0.2' : '1';
     }
@@ -221,31 +324,31 @@
 
   // ── Drag-to-reorder heading fields ──
   var dragItem = null;
-  fieldsContainer.addEventListener('dragstart', function(e){
-    if (noHeadingCb.checked) { e.preventDefault(); return; }
+  mlaFields.addEventListener('dragstart', function(e){
+    if (currentStyle !== 'mla' || noHeadingCb.checked) { e.preventDefault(); return; }
     dragItem = e.target.closest('.field-item');
     if (dragItem) dragItem.classList.add('dragging');
   });
-  fieldsContainer.addEventListener('dragend', function(){
+  mlaFields.addEventListener('dragend', function(){
     if (dragItem) dragItem.classList.remove('dragging');
     dragItem = null;
-    var items = fieldsContainer.querySelectorAll('.field-item');
+    var items = mlaFields.querySelectorAll('.field-item');
     for (var i = 0; i < items.length; i++) items[i].classList.remove('drag-over');
   });
-  fieldsContainer.addEventListener('dragover', function(e){
+  mlaFields.addEventListener('dragover', function(e){
     e.preventDefault();
     var target = e.target.closest('.field-item');
     if (!target || target === dragItem) return;
-    var items = fieldsContainer.querySelectorAll('.field-item');
+    var items = mlaFields.querySelectorAll('.field-item');
     for (var i = 0; i < items.length; i++) items[i].classList.remove('drag-over');
     target.classList.add('drag-over');
   });
-  fieldsContainer.addEventListener('drop', function(e){
+  mlaFields.addEventListener('drop', function(e){
     e.preventDefault();
     var target = e.target.closest('.field-item');
     if (!target || !dragItem || target === dragItem) return;
-    fieldsContainer.insertBefore(dragItem, target);
-    var items = fieldsContainer.querySelectorAll('.field-item');
+    mlaFields.insertBefore(dragItem, target);
+    var items = mlaFields.querySelectorAll('.field-item');
     for (var i = 0; i < items.length; i++) items[i].classList.remove('drag-over');
   });
 
@@ -280,31 +383,43 @@
   // ── Format button ──
   formatBtn.addEventListener('click', function(){
     if (!selectedFile) return;
-    showMsg('processing', '<span class="spinner"></span> Formatting to MLA... (AI is analyzing &amp; rewriting citations)');
+    var styleLabel = currentStyle.toUpperCase();
+    showMsg('processing', '<span class="spinner"></span> Formatting to ' + styleLabel + '...');
     formatBtn.disabled = true;
     formatBtn.classList.remove('active');
 
     var fd = new FormData();
     fd.append('file', selectedFile);
-    if (noHeadingCb.checked) {
-      fd.append('no_heading', 'true');
-    } else {
-      // Read fields in current DOM order
-      var fieldItems = fieldsContainer.querySelectorAll('.field-item');
-      var headingOrder = [];
-      for (var i = 0; i < fieldItems.length; i++) {
-        var fieldName = fieldItems[i].getAttribute('data-field');
-        var val = fieldItems[i].querySelector('input').value;
-        fd.append(fieldName, val);
-        headingOrder.push(fieldName);
+    fd.append('style', currentStyle);
+
+    if (currentStyle === 'mla') {
+      if (noHeadingCb.checked) {
+        fd.append('no_heading', 'true');
+      } else {
+        // Read fields in current DOM order
+        var mlaFieldItems = mlaFields.querySelectorAll('.field-item');
+        var headingOrder = [];
+        for (var i = 0; i < mlaFieldItems.length; i++) {
+          var fieldName = mlaFieldItems[i].getAttribute('data-field');
+          var val = mlaFieldItems[i].querySelector('input').value;
+          fd.append(fieldName, val);
+          headingOrder.push(fieldName);
+        }
+        fd.append('heading_order', JSON.stringify(headingOrder));
       }
-      fd.append('heading_order', JSON.stringify(headingOrder));
+    } else {
+      fd.append('name', document.getElementById('apa_name').value);
+      fd.append('institution', document.getElementById('institution').value);
+      fd.append('course', document.getElementById('apa_course').value);
+      fd.append('instructor', document.getElementById('apa_instructor').value);
+      fd.append('date', document.getElementById('apa_date').value);
     }
 
     fetch('/format', { method: 'POST', body: fd })
       .then(function(r){ return r.json(); })
       .then(function(data){
         if (data.error) { showMsg('error', data.error); resetBtn(); return; }
+        var outStyle = (data.style || currentStyle || 'mla').toUpperCase();
         var h = '<strong>Formatted successfully!</strong>';
         if (data.title) h += '<br>Detected title: "' + data.title + '"';
         if (data.pre_issues && data.pre_issues.length) {
@@ -341,7 +456,7 @@
             h += '</ul>';
           }
           if (!verifiedPasses.length && !actionNeeded.length && !manualReview.length) {
-            h += '<br>No MLA compliance issues detected.';
+            h += '<br>No ' + outStyle + ' compliance issues detected.';
           }
         } else {
           if (data.post_issues && data.post_issues.length) {
@@ -350,14 +465,14 @@
             h += '</ul>';
           }
           if (data.post_issues && data.post_issues.length === 0) {
-            h += '<br>AI found no remaining MLA issues';
+            h += '<br>AI found no remaining ' + outStyle + ' issues';
           }
         }
         if (data.preview && data.preview.length) {
-          h += buildPagePreview(data.preview, data.last_name || 'Author');
+          h += buildPagePreview(data.preview, data.last_name || '', data.style || currentStyle);
         }
-        var dlName = data.download_name || 'essay_mla.docx';
-        h += '<br><a class="download-btn" href="/download/' + data.file_id + '?name=' + encodeURIComponent(dlName) + '">Download MLA Document</a>';
+        var dlName = data.download_name || ('essay_' + (data.style || currentStyle || 'mla') + '.docx');
+        h += '<br><a class="download-btn" href="/download/' + data.file_id + '?name=' + encodeURIComponent(dlName) + '">Download ' + outStyle + ' Document</a>';
         showMsg('success', h);
         resetBtn();
         // Show "Format Another" button
@@ -385,15 +500,22 @@
     resetPageBtn.classList.remove('show');
     // Clear input fields
     document.getElementById('name').value = '';
+    document.getElementById('apa_name').value = '';
+    document.getElementById('institution').value = '';
     document.getElementById('instructor').value = '';
+    document.getElementById('apa_instructor').value = '';
     document.getElementById('course').value = '';
+    document.getElementById('apa_course').value = '';
     // Reset date to today
-    document.getElementById('date').value = now.getDate() + ' ' + months[now.getMonth()] + ' ' + now.getFullYear();
+    var today = now.getDate() + ' ' + months[now.getMonth()] + ' ' + now.getFullYear();
+    document.getElementById('date').value = today;
+    document.getElementById('apa_date').value = today;
     noHeadingCb.checked = false;
-    var inputs = fieldsContainer.querySelectorAll('input[type="text"]');
+    var inputs = mlaFields.querySelectorAll('input[type="text"]');
     for (var i = 0; i < inputs.length; i++) inputs[i].classList.remove('disabled');
-    var handles = fieldsContainer.querySelectorAll('.drag-handle');
+    var handles = mlaFields.querySelectorAll('.drag-handle');
     for (var i = 0; i < handles.length; i++) handles[i].style.opacity = '1';
+    setStyle(currentStyle);
   });
 
   function resetBtn() {
@@ -412,11 +534,12 @@
   }
 
   // Multi-page preview renderer
-  function buildPagePreview(items, lastName) {
+  function buildPagePreview(items, lastName, style) {
+    var mode = (style || 'mla').toLowerCase();
     var LINES_PER_PAGE = 24, CHARS_PER_LINE = 52;
     var pages = [], currentPage = [], currentLines = 0;
     function estimateLines(text, type) {
-      if (type === 'heading' || type === 'title' || type === 'wc_header') return 1;
+      if (type === 'heading' || type === 'title' || type === 'wc_header' || type === 'apa_titlepage' || type === 'apa_body_title' || type === 'ref_header') return 1;
       return Math.max(1, Math.ceil(text.length / CHARS_PER_LINE));
     }
     for (var i = 0; i < items.length; i++) {
@@ -431,15 +554,20 @@
       currentPage.push(item); currentLines += lines;
     }
     if (currentPage.length > 0) pages.push(currentPage);
-    var html = '<div class="page-wrap"><div class="label">Document Preview (' + pages.length + ' page' + (pages.length > 1 ? 's' : '') + ') • MLA spacing view</div>';
+    var html = '<div class="page-wrap"><div class="label">Document Preview (' + pages.length + ' page' + (pages.length > 1 ? 's' : '') + ') • ' + mode.toUpperCase() + ' spacing view</div>';
     for (var p = 0; p < pages.length; p++) {
-      html += '<div class="page"><div class="pg-header">' + escapeHtml(lastName) + ' ' + (p+1) + '</div>';
+      var headerText = mode === 'apa' ? String(p + 1) : (escapeHtml(lastName || 'Author') + ' ' + (p + 1));
+      html += '<div class="page"><div class="pg-header">' + headerText + '</div>';
       for (var j = 0; j < pages[p].length; j++) {
         var it = pages[p][j], cls = 'pg-body';
         if (it.type === 'heading') cls = 'pg-heading';
         else if (it.type === 'title') cls = 'pg-title';
         else if (it.type === 'wc_header') cls = 'pg-wc-header';
         else if (it.type === 'wc_entry') cls = 'pg-wc-entry';
+        else if (it.type === 'apa_titlepage') cls = 'pg-apa-titlepage';
+        else if (it.type === 'apa_body_title') cls = 'pg-apa-body-title';
+        else if (it.type === 'ref_header') cls = 'pg-ref-header';
+        else if (it.type === 'ref_entry') cls = 'pg-ref-entry';
         html += '<div class="pg-para ' + cls + '">' + escapeHtml(it.text) + '</div>';
       }
       html += '</div><div class="page-num">Page ' + (p+1) + ' of ' + pages.length + '</div>';
