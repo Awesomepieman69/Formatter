@@ -8,6 +8,7 @@ Usage:
 """
 
 import argparse, json, os, re, sys
+from typing import Any
 from dotenv import load_dotenv
 
 # Load .env file from the script's directory
@@ -20,10 +21,98 @@ from docx.oxml import OxmlElement
 
 # ── AI Analysis ──────────────────────────────────────────────────────────────
 
+OPENAI_MODEL = (os.getenv("OPENAI_MODEL", "gpt-5.2") or "gpt-5.2").strip()
+
+
+def _env_float(name: str, default: float) -> float:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = float(raw)
+        return value if value > 0 else default
+    except Exception:
+        return default
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = os.getenv(name, "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+        return value if value >= 0 else default
+    except Exception:
+        return default
+
+
+def _build_openai_client(api_key: str):
+    from openai import OpenAI
+
+    timeout_seconds = _env_float("OPENAI_TIMEOUT_SECONDS", 45.0)
+    max_retries = _env_int("OPENAI_MAX_RETRIES", 2)
+    return OpenAI(api_key=api_key, timeout=timeout_seconds, max_retries=max_retries)
+
+
+def _extract_message_text(resp: Any) -> str:
+    try:
+        content = resp.choices[0].message.content
+    except Exception:
+        return ""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        chunks = []
+        for part in content:
+            if isinstance(part, dict):
+                text = part.get("text", "")
+            else:
+                text = getattr(part, "text", "")
+            if text:
+                chunks.append(text)
+        return "\n".join(chunks)
+    return str(content or "")
+
+
+def _strip_json_fences(raw: str) -> str:
+    raw = raw.strip()
+    raw = re.sub(r"^```(?:json)?\s*", "", raw)
+    raw = re.sub(r"\s*```$", "", raw)
+    return raw
+
+
+def _chat_completion_json(client, prompt: str, schema_name: str, schema: dict):
+    base_kwargs = {
+        "model": OPENAI_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0,
+    }
+    try:
+        resp = client.chat.completions.create(
+            **base_kwargs,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": schema_name,
+                    "strict": True,
+                    "schema": schema,
+                },
+            },
+        )
+        raw = _extract_message_text(resp).strip()
+        if not raw:
+            raise ValueError("Empty model response")
+        return json.loads(raw)
+    except Exception:
+        # Fallback for models/accounts that do not support structured outputs.
+        resp = client.chat.completions.create(**base_kwargs)
+        raw = _strip_json_fences(_extract_message_text(resp))
+        return json.loads(raw)
+
+
 def analyze_with_ai(full_text: str, api_key: str, style: str = "mla") -> dict:
     """Use OpenAI to detect essay structure and style compliance signals."""
-    from openai import OpenAI
-    client = OpenAI(api_key=api_key)
+    client = _build_openai_client(api_key)
     if style == "apa":
         prompt = f"""Analyze this essay text and return JSON with these fields:
 - "title": essay title (best guess, or "" if unclear)
@@ -42,6 +131,37 @@ Only return valid JSON, nothing else.
 
 Essay text (paragraphs separated by \\n---\\n):
 {full_text[:8000]}"""
+        schema = {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "title": {"type": "string"},
+                "author": {"type": "string"},
+                "institution": {"type": "string"},
+                "instructor": {"type": "string"},
+                "course": {"type": "string"},
+                "date": {"type": "string"},
+                "has_references": {"type": "boolean"},
+                "title_line_index": {"type": "integer"},
+                "heading_end_index": {"type": "integer"},
+                "references_start_index": {"type": "integer"},
+                "issues": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": [
+                "title",
+                "author",
+                "institution",
+                "instructor",
+                "course",
+                "date",
+                "has_references",
+                "title_line_index",
+                "heading_end_index",
+                "references_start_index",
+                "issues",
+            ],
+        }
+        return _chat_completion_json(client, prompt, "apa_structure_analysis", schema)
     else:
         prompt = f"""Analyze this essay text and return JSON with these fields:
 - "title": the essay title (best guess, or "" if unclear)
@@ -59,17 +179,35 @@ Only return valid JSON, nothing else.
 
 Essay text (paragraphs separated by \\n---\\n):
 {full_text[:8000]}"""
-
-    resp = client.chat.completions.create(
-        model="gpt-5.2",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-    )
-    raw = resp.choices[0].message.content.strip()
-    # Strip markdown fences if present
-    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = re.sub(r"\s*```$", "", raw)
-    return json.loads(raw)
+        schema = {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "title": {"type": "string"},
+                "author": {"type": "string"},
+                "instructor": {"type": "string"},
+                "course": {"type": "string"},
+                "date": {"type": "string"},
+                "has_works_cited": {"type": "boolean"},
+                "title_line_index": {"type": "integer"},
+                "heading_end_index": {"type": "integer"},
+                "works_cited_start_index": {"type": "integer"},
+                "issues": {"type": "array", "items": {"type": "string"}},
+            },
+            "required": [
+                "title",
+                "author",
+                "instructor",
+                "course",
+                "date",
+                "has_works_cited",
+                "title_line_index",
+                "heading_end_index",
+                "works_cited_start_index",
+                "issues",
+            ],
+        }
+        return _chat_completion_json(client, prompt, "mla_structure_analysis", schema)
 
 
 def post_check_content_with_ai(
@@ -80,8 +218,7 @@ def post_check_content_with_ai(
     style: str = "mla",
 ) -> list[str]:
     """After formatting, ask AI to review only source/citation compliance (not layout)."""
-    from openai import OpenAI
-    client = OpenAI(api_key=api_key)
+    client = _build_openai_client(api_key)
     if style == "apa":
         style_label = "APA 7 student-paper"
         citation_label = "APA-style in-text citations"
@@ -108,22 +245,17 @@ Known context:
 
 Essay body text (first 6000 chars):
 {body_text[:6000]}"""
-
-    resp = client.chat.completions.create(
-        model="gpt-5.2",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-    )
-    raw = resp.choices[0].message.content.strip()
-    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = re.sub(r"\s*```$", "", raw)
-    return json.loads(raw)
+    schema = {
+        "type": "array",
+        "items": {"type": "string"},
+    }
+    result = _chat_completion_json(client, prompt, f"{style}_content_warnings", schema)
+    return result if isinstance(result, list) else []
 
 
 def rewrite_works_cited_with_ai(entries: list[str], api_key: str) -> list[str]:
     """(#3) Use gpt-5.2 to rewrite each Works Cited entry to proper MLA 9th ed format."""
-    from openai import OpenAI
-    client = OpenAI(api_key=api_key)
+    client = _build_openai_client(api_key)
 
     numbered = "\n".join(f"{i+1}. {e}" for i, e in enumerate(entries))
     prompt = f"""You are an MLA 9th edition citation expert. Below are Works Cited entries that may have formatting errors.
@@ -133,18 +265,13 @@ Use *asterisks* around text that should be italicized (book/journal titles).
 
 Entries:
 {numbered}"""
-
-    resp = client.chat.completions.create(
-        model="gpt-5.2",
-        messages=[{"role": "user", "content": prompt}],
-        temperature=0,
-    )
-    raw = resp.choices[0].message.content.strip()
-    raw = re.sub(r"^```(?:json)?\s*", "", raw)
-    raw = re.sub(r"\s*```$", "", raw)
-    result = json.loads(raw)
+    schema = {
+        "type": "array",
+        "items": {"type": "string"},
+    }
+    result = _chat_completion_json(client, prompt, "mla_works_cited_rewrite", schema)
     # Safety: return original if AI returned wrong count
-    return result if len(result) == len(entries) else entries
+    return result if isinstance(result, list) and len(result) == len(entries) else entries
 
 
 # ── Formatting Helpers ───────────────────────────────────────────────────────
